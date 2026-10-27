@@ -40,15 +40,17 @@ That is the whole installation. Nothing to register and nothing to configure on 
 
 ### 4. Open the check page
 
-In your browser open `https://your-site.com/roxy.php?check=XXXXXX`, with your own domain and, in place of `XXXXXX`, the last six characters of your key. Only someone holding the key sees the report. Every line should be green. The first visit also downloads the widget files into a `roxy` folder next to `roxy.php`.
+In your browser open `https://your-site.com/roxy.php?check=XXXXXX`, with your own domain and, in place of `XXXXXX`, the last six characters of your key. Only someone holding the key sees the report. Every line should be green.
+
+The first visit also downloads the widgets for you, so there is nothing else to download. Refresh your file manager: a new `roxy` folder now sits next to `roxy.php`, holding `cdn` and `schemas`. Leave it there. The snippet in step 5 loads the widgets from it, and new releases land in it on their own.
 
 ![The check page with every line green](https://raw.githubusercontent.com/RoxyAPI/self-hosted-widgets-php/main/docs/images/04-check-green-en.png)
 
-A red line says what to fix right under it. If you see a page of code starting with `<?php` instead, read [I see code instead of the check page](#i-see-code-instead-of-the-check-page).
+A red line says what to fix right under it. If **Widget files ready** stays red, [put the files there by hand](#the-widget-does-not-appear-at-all). If you see a page of code starting with `<?php` instead, read [I see code instead of the check page](#i-see-code-instead-of-the-check-page).
 
 ### 5. Paste the snippet into a page
 
-Paste these three lines wherever your site accepts HTML: a page editor in its HTML mode, or the theme template. Step by step guides for popular site builders and shop platforms are in the [RoxyAPI docs](https://roxyapi.com/docs/widgets).
+Paste these three lines wherever your site accepts HTML: a page editor in its HTML mode, or the theme template. Paste them as they are, on any page of the same site: each path starts with `/`, so it points at `roxy.php` and the `roxy` folder in your site folder from step 3. Step by step guides for popular site builders and shop platforms are in the [RoxyAPI docs](https://roxyapi.com/docs/widgets).
 
 ```html
 <script src="/roxy/cdn/roxy-ui.js" defer></script>
@@ -84,7 +86,14 @@ Open the check page and fix any red line. A red **Publishable key works for this
 
 Open `https://your-site.com/roxy/cdn/roxy-ui.js` in the browser. If it is not found, open the check page once, which downloads the widget files, and confirm the last line is green.
 
-If the check page stays red on **Widget files ready** while the lines above it are green, put the files there by hand: download `roxyapi-ui-{version}.tgz` from the [latest RoxyAPI UI release](https://github.com/RoxyAPI/ui/releases/latest), unpack it on your computer, and upload `package/dist/cdn` and `package/dist/schemas` into a `roxy` folder next to `roxy.php`, so you have `roxy/cdn/roxy-ui.js` and `roxy/schemas/`.
+If the check page stays red on **Widget files ready** while the lines above it are green, put the files there by hand:
+
+1. On the [latest RoxyAPI UI release](https://github.com/RoxyAPI/ui/releases/latest), under **Assets**, download `roxyapi-ui-{version}.tgz`. Not the `react` or `vue` file.
+2. Unpack it on your computer. Inside, open `package`, then `dist`.
+3. In your file manager, create a folder named `roxy` next to `roxy.php`, in your site folder from step 3.
+4. Upload the `cdn` and `schemas` folders from `dist` into `roxy`.
+
+You now have `roxy/cdn/roxy-ui.js` and `roxy/schemas/` beside `roxy.php`. Open the check page again: the last line turns green.
 
 ### The widgets are in English
 
