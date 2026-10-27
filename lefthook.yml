@@ -1,0 +1,8 @@
+# The same gates as ci.yml, run locally. Install once with `lefthook install`.
+pre-commit:
+  commands:
+    lint:
+      glob: "*.php"
+      run: php -l roxy.php
+    test:
+      run: bash tests/run.sh

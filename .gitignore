@@ -1,0 +1,6 @@
+roxy/
+roxy.new/
+roxy.old/
+roxy.tgz
+.env
+.DS_Store
