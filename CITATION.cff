@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "RoxyAPI Self-Hosted Widgets for PHP"
+abstract: "One PHP file that serves RoxyAPI widgets from your own domain: the widget files, the city search and every reading load from your site."
+authors:
+  - name: "RoxyAPI"
+repository-code: "https://github.com/RoxyAPI/self-hosted-widgets-php"
+url: "https://roxyapi.com/docs/widgets"
+license: MIT
+type: software
+keywords:
+  - astrology-widget
+  - natal-chart
+  - php
+  - self-hosted
+  - web-components
