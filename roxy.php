@@ -1,7 +1,7 @@
 <?php
 /**
  * RoxyAPI widgets served from your own domain.
- * Upload this file to your site root, paste your publishable key below, then open /roxy.php?check.
+ * Upload this file to your site root, paste your publishable key below, then open /roxy.php?check= plus the last six characters of the key.
  * https://github.com/RoxyAPI/self-hosted-widgets-php
  */
 
@@ -14,8 +14,12 @@ const ROXY_PACKAGE = 'https://registry.npmjs.org/@roxyapi/ui/latest';
 const ROXY_RELEASE = 'https://github.com/RoxyAPI/ui/releases/download/v%1$s/roxyapi-ui-%1$s.tgz';
 const ROXY_REFRESH = 21600; // Seconds between checks for a new widget release.
 const ROXY_MAX_BODY = 65536;
+const PHP_RELEASES = 'https://www.php.net/releases/index.php?json&version=%s';
 
 $dir = __DIR__ . '/roxy';
+// A warning text would print server paths into a reading.
+ini_set('display_errors', '0');
+header('X-Content-Type-Options: nosniff');
 
 if (isset($_GET['check'])) {
 	check_page($ROXY_KEY, $dir);
@@ -127,26 +131,30 @@ function http($method, $url, array $headers = [], $body = null, $timeout = 30)
 function sync_widgets($dir, $force)
 {
 	$stamp = "$dir/version.txt";
+	// Files uploaded by hand count as a release, so they are served and replaced by the next one.
+	if (!is_file($stamp) && is_file("$dir/cdn/roxy-ui.js")) @file_put_contents($stamp, 'manual');
 	if (!$force && is_file($stamp) && time() - filemtime($stamp) < ROXY_REFRESH) return true;
 	$lock = fopen(__FILE__, 'r');
 	if (!flock($lock, LOCK_EX | LOCK_NB)) return is_file($stamp);
 	@set_time_limit(300);
+	// A failed check waits the same interval as a successful one, so a blocked download is not retried on every reading.
+	$keep = function () use ($stamp) { return is_file($stamp) && touch($stamp); };
 	$res = http('GET', ROXY_PACKAGE, [], null, 15);
 	$meta = $res && $res[0] === 200 ? json_decode($res[1], true) : null;
-	if (!isset($meta['version'], $meta['dist']['tarball'], $meta['dist']['shasum'])) return is_file($stamp);
+	if (!isset($meta['version'], $meta['dist']['tarball'], $meta['dist']['shasum'])) return $keep();
 	if (is_file($stamp) && trim(file_get_contents($stamp)) === $meta['version']) return touch($stamp);
 	foreach ([$meta['dist']['tarball'], sprintf(ROXY_RELEASE, $meta['version'])] as $url) {
 		$tgz = http('GET', $url, [], null, 240);
 		if ($tgz && $tgz[0] === 200 && sha1($tgz[1]) === $meta['dist']['shasum']) break;
 		$tgz = null;
 	}
-	if (!$tgz) return is_file($stamp);
+	if (!$tgz) return $keep();
 	$tmp = "$dir.tgz";
 	file_put_contents($tmp, $tgz[1]);
 	unset($tgz);
 	$ok = untar($tmp, "$dir.new");
 	unlink($tmp);
-	if (!$ok) return is_file($stamp);
+	if (!$ok) return $keep();
 	file_put_contents("$dir.new/version.txt", $meta['version']);
 	remove_tree("$dir.old");
 	if (is_dir($dir)) rename($dir, "$dir.old");
@@ -155,7 +163,7 @@ function sync_widgets($dir, $force)
 	return true;
 }
 
-/** Extracts package/dist/cdn and package/dist/schemas from an npm tarball, source maps left out. */
+/** Extracts the .js and .json files of package/dist/cdn and package/dist/schemas from an npm tarball, so nothing the server would run lands in the folder. */
 function untar($tgz, $to)
 {
 	remove_tree($to);
@@ -170,8 +178,8 @@ function untar($tgz, $to)
 		$long = null;
 		if ($type === 'x' && preg_match('/\d+ path=([^\n]+)\n/', $data, $m)) $long = $m[1];
 		$name = ltrim($name, '/');
-		if (($type !== '0' && $type !== "\0") || strpos($name, '..') !== false || substr($name, -4) === '.map') continue;
-		if (!preg_match('#^package/dist/((cdn|schemas)/.+)$#', $name, $m)) continue;
+		if (($type !== '0' && $type !== "\0") || strpos($name, '..') !== false) continue;
+		if (!preg_match('#^package/dist/((cdn|schemas)/[A-Za-z0-9._/-]+\.(js|json))$#', $name, $m)) continue;
 		$file = "$to/$m[1]";
 		if (!is_dir(dirname($file)) && !mkdir(dirname($file), 0755, true)) return false;
 		if (file_put_contents($file, $data) !== strlen($data)) return false;
@@ -189,13 +197,49 @@ function remove_tree($path)
 	rmdir($path);
 }
 
+/**
+ * The PHP line of the check page: green on the latest release of its branch, yellow when php.net lists a newer one or no
+ * longer supports the branch, so an owner hears about a security release without the widgets stopping. Green when php.net is unreachable.
+ */
+function php_update_line($web, $t)
+{
+	$branch = PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION;
+	$current = "$branch." . PHP_RELEASE_VERSION;
+	$res = $web ? http('GET', sprintf(PHP_RELEASES, $branch), [], null, 10) : null;
+	$feed = $res && $res[0] === 200 ? json_decode($res[1], true) : null;
+	$label = 'PHP ' . PHP_VERSION;
+	if (!isset($feed['version'], $feed['supported_versions']) || !is_array($feed['supported_versions'])) return [true, $label, ''];
+	if (!in_array($branch, $feed['supported_versions'], true)) {
+		return [null, $label, $t("PHP $branch no longer receives security fixes. Switch to the newest PHP version in your hosting panel, or ask your hosting provider to.", "PHP $branch больше не получает исправлений безопасности. Выберите самую новую версию PHP в панели хостинга или попросите об этом хостинг.")];
+	}
+	if (version_compare($current, $feed['version'], '<')) {
+		$out = in_array('security', $feed['tags'] ?? [], true)
+			? $t("PHP {$feed['version']} is out with security fixes.", "Вышел PHP {$feed['version']} с исправлениями безопасности.")
+			: $t("PHP {$feed['version']} is out.", "Вышел PHP {$feed['version']}.");
+		return [null, $label, $out . ' ' . $t('Ask your hosting provider to update PHP, or to confirm this build already carries its fixes.', 'Попросите хостинг обновить PHP или подтвердить, что эта сборка уже содержит его исправления.')];
+	}
+	return [true, $label, ''];
+}
+
 function check_page($key, $dir)
 {
 	$ru = stripos($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '', 'ru') === 0;
 	$t = function ($en, $ruText) use ($ru) { return $ru ? $ruText : $en; };
+	header('Content-Type: text/html; charset=utf-8');
+	header('Cache-Control: no-store');
+	header('X-Robots-Tag: noindex');
+	// Once a key is set the report names the PHP version, so only someone holding the key reads it.
+	if ($key !== '' && !hash_equals(substr($key, -6), (string) $_GET['check'])) {
+		echo '<!doctype html><meta charset="utf-8"><meta name="robots" content="noindex"><title>RoxyAPI check</title>',
+			'<p style="font:16px/1.5 system-ui,sans-serif;max-width:640px;margin:40px auto;padding:0 16px">',
+			htmlspecialchars($t('Add the last six characters of your key to the address: roxy.php?check=XXXXXX', 'Добавьте в адрес последние шесть символов ключа: roxy.php?check=XXXXXX')), '</p>';
+		return;
+	}
 	$lines = [];
-	$lines[] = [version_compare(PHP_VERSION, '7.4', '>='), 'PHP ' . PHP_VERSION, $t('PHP 7.4 or newer is needed. Switch the PHP version in your hosting panel.', 'Нужен PHP 7.4 или новее. Переключите версию PHP в панели хостинга.')];
 	$web = function_exists('curl_init') || ini_get('allow_url_fopen');
+	$lines[] = version_compare(PHP_VERSION, '7.4', '>=')
+		? php_update_line($web, $t)
+		: [false, 'PHP ' . PHP_VERSION, $t('PHP 7.4 or newer is needed. Switch the PHP version in your hosting panel.', 'Нужен PHP 7.4 или новее. Переключите версию PHP в панели хостинга.')];
 	$lines[] = [$web, $t('Outgoing connections', 'Исходящие соединения'), $t('Ask your hosting to enable the PHP curl extension.', 'Попросите хостинг включить расширение PHP curl.')];
 	$res = $web ? http('GET', ROXY_API . '/location/openapi.json', [], null, 20) : null;
 	$reach = $res && $res[0] === 200 && isset(json_decode($res[1], true)['paths']);
@@ -208,20 +252,20 @@ function check_page($key, $dir)
 	}
 	$writable = is_dir($dir) ? is_writable($dir) : is_writable(__DIR__);
 	$lines[] = [$writable, $t('Folder for widget files is writable', 'Папка для файлов виджетов доступна для записи'), $t('Allow PHP to write to the folder that holds roxy.php (permissions 755 in your file manager).', 'Разрешите PHP запись в папку, где лежит roxy.php (права 755 в файловом менеджере).')];
-	$synced = $writable && $reach && sync_widgets($dir, !is_file("$dir/version.txt"));
+	$synced = ($writable && $reach && sync_widgets($dir, !is_file("$dir/version.txt"))) || is_file("$dir/cdn/roxy-ui.js");
 	$version = is_file("$dir/version.txt") ? trim(file_get_contents("$dir/version.txt")) : '';
-	$lines[] = [$synced && $version !== '', $t('Widget files ready', 'Файлы виджетов готовы') . ($version ? " ($version)" : ''), $t('Fix the lines above, then reload this page.', 'Исправьте строки выше и обновите эту страницу.')];
+	$lines[] = [$synced, $t('Widget files ready', 'Файлы виджетов готовы') . ($version ? " ($version)" : ''), $t('Fix the lines above, then reload this page.', 'Исправьте строки выше и обновите эту страницу.')];
 
-	header('Content-Type: text/html; charset=utf-8');
-	header('Cache-Control: no-store');
-	header('X-Robots-Tag: noindex');
 	$all = !in_array(false, array_column($lines, 0), true);
 	echo '<!doctype html><html lang="', $ru ? 'ru' : 'en', '"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">',
 		'<title>RoxyAPI check</title><style>body{font:16px/1.5 system-ui,sans-serif;max-width:640px;margin:40px auto;padding:0 16px;color:#18181b}',
-		'li{list-style:none;margin:12px 0}b{display:inline-block;width:1.5em}.ok b{color:#15803d}.no b{color:#b91c1c}small{display:block;margin-left:1.5em;color:#52525b}</style>',
+		'li{list-style:none;margin:12px 0}b{display:inline-block;width:1.5em}.ok b{color:#15803d}.no b{color:#b91c1c}.warn b{color:#b45309}small{display:block;margin-left:1.5em;color:#52525b}</style>',
 		'<h1>RoxyAPI</h1><ul>';
 	foreach ($lines as $l) {
-		echo '<li class="', $l[0] ? 'ok' : 'no', '"><b>', $l[0] ? '&#10003;' : '&#10007;', '</b>', htmlspecialchars($l[1]), $l[0] ? '' : '<small>' . htmlspecialchars($l[2]) . '</small>', '</li>';
+		$state = $l[0] === null ? ['warn', '!'] : ($l[0] ? ['ok', '&#10003;'] : ['no', '&#10007;']);
+		echo '<li class="', $state[0], '"><b>', $state[1], '</b>', htmlspecialchars($l[1]), $l[0] ? '' : '<small>' . htmlspecialchars($l[2]) . '</small>', '</li>';
 	}
-	echo '</ul><p>', $all ? $t('All green. Your widgets are ready.', 'Всё зелёное. Виджеты готовы к работе.') : $t('Fix the red lines, then reload this page.', 'Исправьте красные строки и обновите эту страницу.'), '</p>';
+	$warned = in_array(null, array_column($lines, 0), true);
+	echo '</ul><p>', !$all ? $t('Fix the red lines, then reload this page.', 'Исправьте красные строки и обновите эту страницу.')
+		: ($warned ? $t('Your widgets are ready. Pass the yellow line to your hosting provider.', 'Виджеты готовы к работе. Передайте жёлтую строку своему хостингу.') : $t('All green. Your widgets are ready.', 'Всё зелёное. Виджеты готовы к работе.')), '</p>';
 }

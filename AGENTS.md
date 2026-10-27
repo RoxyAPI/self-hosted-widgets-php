@@ -6,9 +6,9 @@ This repo is one file, `roxy.php`, that lets any PHP site serve RoxyAPI widgets 
 
 | Request | Answer |
 |---|---|
-| `GET /roxy.php?check` | A plain diagnostic page, one green or red line per requirement. Also downloads the widget files on first run |
-| `POST /roxy.php` with JSON `{ path, method, body, query }` | The widget `submit-url` request. Sent to `https://roxyapi.com/api/v2{path}` with the publishable key and the site as `Origin`; status and JSON body returned unchanged |
-| `GET /roxy.php?q=...&limit=8` | The widget `location-url` city search, sent to `/location/search` the same way |
+| `GET /roxy.php?check=XXXXXX` (last six characters of the key) | A plain diagnostic page, one green, yellow or red line per requirement; without the matching code once a key is set, only a line asking for it. Also downloads the widget files on first run |
+| `POST /roxy.php` with JSON `{ path, method, body, query }` | Every widget `submit-url` request, the city search included. Sent to `https://roxyapi.com/api/v2{path}` with the publishable key and the site as `Origin`; status and JSON body returned unchanged |
+| `GET /roxy.php?q=...&limit=8` | A city search sent through `location-url` by older snippets, relayed to `/location/search` the same way |
 | anything else | 404 |
 
 The widget files are not served by `roxy.php`. It keeps a `roxy/` folder beside itself holding `dist/cdn/` and `dist/schemas/` of the latest `@roxyapi/ui` release, as they ship, and the web server serves them as static files. Forms read their schemas from beside the script (`/roxy/cdn/roxy-ui.js` reads `/roxy/schemas/`), so the two folders must stay side by side. The release is checked every six hours on API traffic and on the check page; the tarball is verified against the registry checksum before it replaces the folder.
@@ -18,10 +18,10 @@ The widget files are not served by `roxy.php`. It keeps a `roxy/` folder beside 
 ```html
 <script src="/roxy/cdn/roxy-ui.js" defer></script>
 <script src="/roxy/cdn/locales/ru.js" defer></script>
-<roxy-natal-chart data-endpoint="astrology/natal-chart" submit-url="/roxy.php" location-url="/roxy.php" hide-sections="hint"></roxy-natal-chart>
+<roxy-natal-chart submit-url="/roxy.php" hide-sections="hint"></roxy-natal-chart>
 ```
 
-Any tag from `https://roxyapi.com/widgets` works: drop `publishable-key` and add `submit-url` and `location-url`. Tag names and `data-endpoint` values come from the package `components-catalog.json` and the live spec at `https://roxyapi.com/api/v2/openapi.json`; never invent one.
+Any tag from `https://roxyapi.com/widgets` works: replace `publishable-key` with `submit-url`. Each tag fetches its own default reading; a config attribute (`period`, `mode`) or `data-endpoint` picks another. Tag names, config attributes and `data-endpoint` values come from the package `components-catalog.json` and the live spec at `https://roxyapi.com/api/v2/openapi.json`; never invent one.
 
 ## Rules for changes
 

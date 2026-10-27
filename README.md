@@ -40,7 +40,7 @@ That is the whole installation. Nothing to register and nothing to configure on 
 
 ### 4. Open the check page
 
-In your browser open `https://your-site.com/roxy.php?check`, with your own domain. Every line should be green. The first visit also downloads the widget files into a `roxy` folder next to `roxy.php`.
+In your browser open `https://your-site.com/roxy.php?check=XXXXXX`, with your own domain and, in place of `XXXXXX`, the last six characters of your key. Only someone holding the key sees the report. Every line should be green. The first visit also downloads the widget files into a `roxy` folder next to `roxy.php`.
 
 ![The check page with every line green](https://raw.githubusercontent.com/RoxyAPI/self-hosted-widgets-php/main/docs/images/04-check-green-en.png)
 
@@ -53,7 +53,7 @@ Paste these three lines wherever your site accepts HTML: a page editor in its HT
 ```html
 <script src="/roxy/cdn/roxy-ui.js" defer></script>
 <script src="/roxy/cdn/locales/ru.js" defer></script>
-<roxy-natal-chart data-endpoint="astrology/natal-chart" submit-url="/roxy.php" location-url="/roxy.php" hide-sections="hint"></roxy-natal-chart>
+<roxy-natal-chart submit-url="/roxy.php" hide-sections="hint"></roxy-natal-chart>
 ```
 
 Open the page. Visitors enter a birth date, a time and a city, pick the city from the list, and the chart appears.
@@ -62,10 +62,10 @@ Open the page. Visitors enter a birth date, a time and a city, pick the city fro
 
 ## How do I add more widgets?
 
-Every widget in the [widgets gallery](https://roxyapi.com/widgets) works with this file. Copy its tag, and in that tag replace `publishable-key="pk_live_YOUR_KEY"` with `submit-url="/roxy.php" location-url="/roxy.php"`. The two `<script>` lines go on a page once, however many widgets it shows. A transits table next to the chart:
+Every widget in the [widgets gallery](https://roxyapi.com/widgets) works with this file. Copy its tag, and in that tag replace `publishable-key="pk_live_YOUR_KEY"` with `submit-url="/roxy.php"`. The two `<script>` lines go on a page once, however many widgets it shows. A transits table next to the chart:
 
 ```html
-<roxy-transits-table data-endpoint="astrology/transits" submit-url="/roxy.php" location-url="/roxy.php" hide-sections="hint"></roxy-transits-table>
+<roxy-transits-table submit-url="/roxy.php" hide-sections="hint"></roxy-transits-table>
 ```
 
 New widgets and new readings need no change to `roxy.php`.
@@ -78,11 +78,13 @@ Widgets follow the language of the page. The second script line loads the Russia
 
 ### The city search finds nothing
 
-Open `roxy.php?check` and fix any red line. A red **Publishable key works for this site** means the key is incomplete or your domain is missing from its **Allowed origins**: add both your domain and the `www.` version. If every line is green, check that the page and `roxy.php` are on the same domain, and that the paths in the snippet start with `/roxy.php`.
+Open the check page and fix any red line. A red **Publishable key works for this site** means the key is incomplete or your domain is missing from its **Allowed origins**: add both your domain and the `www.` version. If every line is green, check that the page and `roxy.php` are on the same domain, and that the paths in the snippet start with `/roxy.php`.
 
 ### The widget does not appear at all
 
-Open `https://your-site.com/roxy/cdn/roxy-ui.js` in the browser. If it is not found, open `roxy.php?check` once, which downloads the widget files, and confirm the last line is green.
+Open `https://your-site.com/roxy/cdn/roxy-ui.js` in the browser. If it is not found, open the check page once, which downloads the widget files, and confirm the last line is green.
+
+If the check page stays red on **Widget files ready** while the lines above it are green, put the files there by hand: download `roxyapi-ui-{version}.tgz` from the [latest RoxyAPI UI release](https://github.com/RoxyAPI/ui/releases/latest), unpack it on your computer, and upload `package/dist/cdn` and `package/dist/schemas` into a `roxy` folder next to `roxy.php`, so you have `roxy/cdn/roxy-ui.js` and `roxy/schemas/`.
 
 ### The widgets are in English
 
@@ -91,6 +93,10 @@ Keep the `ru.js` line in the snippet and set the page language to Russian, or ad
 ### A red line on the check page
 
 Each red line says what to do under it. **This server reaches roxyapi.com** in red means your hosting blocks outgoing connections; ask hosting support to allow outgoing HTTPS. **Folder for widget files is writable** in red means PHP may not create the `roxy` folder; set the permissions of the site folder to 755 in the file manager.
+
+### A yellow line on the check page
+
+Your widgets work. A yellow PHP line means a newer PHP release with security fixes is out, or your PHP version no longer receives them. Send that line to your hosting support and ask them to update PHP, or to confirm your PHP build already carries the fixes. Many panels also let you switch to the newest PHP version yourself.
 
 ### My site lives in a subfolder
 
