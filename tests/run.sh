@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run: bash tests/run.sh (offline). LIVE=1 ROXY_TEST_KEY=pk_... bash tests/run.sh adds the end to end checks.
-# Does: serves roxy.php with the PHP built-in server and asserts every refusal, the relay and that no key is ever echoed.
+# Does: serves roxy.php with the PHP built-in server and asserts every refusal, the relay, that no key is ever echoed, and that a hostile tarball lands only plain widget files (python3 builds it).
 # Writes: a temporary docroot, removed on exit.
 set -u
 cd "$(dirname "$0")/.."
@@ -67,6 +67,28 @@ grep -q "last six characters" <<< "$LAST" || { echo "FAIL wrong code did not get
 expect "no key yet answers 503" 503 -X POST -H "$SO" -d "$OK" "$BASE/nokey.php"
 expect "same-origin by Origin passes the guard" 503 -X POST -H "Origin: http://127.0.0.1:$PORT" -d "$OK" "$BASE/nokey.php"
 expect "same-origin by Referer passes the guard" 503 -H "Referer: http://127.0.0.1:$PORT/page" "$BASE/nokey.php?q=Paris"
+
+# A hostile tarball: only the plain .js and .json files under cdn/ and schemas/ may land.
+python3 - "$ROOT/hostile.tgz" <<'PY'
+import io, sys, tarfile
+with tarfile.open(sys.argv[1], 'w:gz') as t:
+	def add(name, kind=tarfile.REGTYPE, target=''):
+		i = tarfile.TarInfo(name); i.type = kind; i.linkname = target; data = b'x'
+		i.size = len(data) if kind == tarfile.REGTYPE else 0
+		t.addfile(i, io.BytesIO(data) if kind == tarfile.REGTYPE else None)
+	for n in ('package/dist/cdn/roxy-ui.js', 'package/dist/cdn/locales/ru.js', 'package/dist/schemas/a-b_c.json',
+			'package/dist/cdn/x.php.js', 'package/dist/cdn/.htaccess.js', 'package/dist/cdn/shell.php', 'package/dist/cdn/../../up.js',
+			'package/dist/cdn/a..b.js', 'package/README.js', 'package/dist/other/x.js'):
+		add(n)
+	add('package/dist/cdn/link.js', tarfile.SYMTYPE, '/etc/passwd')
+	add('package/dist/cdn/hard.js', tarfile.LNKTYPE, 'package/dist/cdn/roxy-ui.js')
+PY
+landed=$(php -r '$s = file_get_contents($argv[1]); eval(substr($s, strpos($s, "\nfunction refuse")));
+	untar($argv[2], $argv[3]);
+	foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($argv[3], FilesystemIterator::SKIP_DOTS)) as $f) echo substr($f->getPathname(), strlen($argv[3]) + 1), "\n";' \
+	roxy.php "$ROOT/hostile.tgz" "$ROOT/hostile" | sort | tr '\n' ' ')
+[ "$landed" = "cdn/locales/ru.js cdn/roxy-ui.js schemas/a-b_c.json " ] && echo "ok   hostile tarball lands only plain widget files" || { echo "FAIL hostile tarball landed: $landed"; fails=$((fails + 1)); }
+[ ! -e "$ROOT/up.js" ] || { echo "FAIL traversal wrote outside the folder"; fails=$((fails + 1)); }
 
 if [ "${LIVE:-}" = 1 ]; then
 	if [ -z "$KEY" ]; then echo "FAIL LIVE=1 needs ROXY_TEST_KEY"; exit 1; fi

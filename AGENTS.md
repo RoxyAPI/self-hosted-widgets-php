@@ -11,7 +11,7 @@ This repo is one file, `roxy.php`, that lets any PHP site serve RoxyAPI widgets 
 | `GET /roxy.php?q=...&limit=8` | A city search sent through `location-url` by older snippets, relayed to `/location/search` the same way |
 | anything else | 404 |
 
-The widget files are not served by `roxy.php`. It keeps a `roxy/` folder beside itself holding `dist/cdn/` and `dist/schemas/` of the latest `@roxyapi/ui` release, as they ship, and the web server serves them as static files. Forms read their schemas from beside the script (`/roxy/cdn/roxy-ui.js` reads `/roxy/schemas/`), so the two folders must stay side by side. The release is checked every six hours on API traffic and on the check page; the tarball is verified against the registry checksum before it replaces the folder.
+The widget files are not served by `roxy.php`. It keeps a `roxy/` folder beside itself holding `dist/cdn/` and `dist/schemas/` of the latest `@roxyapi/ui` release, as they ship, and the web server serves them as static files. Forms read their schemas from beside the script (`/roxy/cdn/roxy-ui.js` reads `/roxy/schemas/`), so the two folders must stay side by side. The release is checked every six hours on API traffic and on the check page; the tarball is verified against the registry sha512 integrity before it replaces the folder.
 
 ## The snippet
 
@@ -26,6 +26,7 @@ Any tag from `https://roxyapi.com/widgets` works: replace `publishable-key` with
 ## Rules for changes
 
 - `roxy.php` relays any path under `/api/v2/` and holds no list of endpoints or files, so a new endpoint or a new widget release needs no change. Keep it that way.
+- Extraction writes only regular `.js` and `.json` files under `cdn/` and `schemas/` whose every name part is letters, digits, `-` or `_` with one extension, so no link, hidden file or second extension (`x.php.js`) a server could run ever lands on the site.
 - Keep the generic guards: a fixed API host, a plain path with no traversal, GET or POST only, a body size cap, a same-site check on every relayed request, and redirects followed only on requests that carry no key.
 - The key is publishable, never secret: the API itself answers only what a publishable key may read for the allowed origins, so the relay needs no endpoint rules.
 - PHP 7.4 through 8.4, curl with a PHP streams fallback, no Composer, no database.

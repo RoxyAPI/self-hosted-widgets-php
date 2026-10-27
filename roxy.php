@@ -141,11 +141,12 @@ function sync_widgets($dir, $force)
 	$keep = function () use ($stamp) { return is_file($stamp) && touch($stamp); };
 	$res = http('GET', ROXY_PACKAGE, [], null, 15);
 	$meta = $res && $res[0] === 200 ? json_decode($res[1], true) : null;
-	if (!isset($meta['version'], $meta['dist']['tarball'], $meta['dist']['shasum'])) return $keep();
+	$sum = $meta['dist']['integrity'] ?? '';
+	if (!isset($meta['version'], $meta['dist']['tarball']) || strpos($sum, 'sha512-') !== 0) return $keep();
 	if (is_file($stamp) && trim(file_get_contents($stamp)) === $meta['version']) return touch($stamp);
 	foreach ([$meta['dist']['tarball'], sprintf(ROXY_RELEASE, $meta['version'])] as $url) {
 		$tgz = http('GET', $url, [], null, 240);
-		if ($tgz && $tgz[0] === 200 && sha1($tgz[1]) === $meta['dist']['shasum']) break;
+		if ($tgz && $tgz[0] === 200 && hash_equals($sum, 'sha512-' . base64_encode(hash('sha512', $tgz[1], true)))) break;
 		$tgz = null;
 	}
 	if (!$tgz) return $keep();
@@ -163,7 +164,11 @@ function sync_widgets($dir, $force)
 	return true;
 }
 
-/** Extracts the .js and .json files of package/dist/cdn and package/dist/schemas from an npm tarball, so nothing the server would run lands in the folder. */
+/**
+ * Extracts the .js and .json files of package/dist/cdn and package/dist/schemas from an npm tarball, so nothing the server would run lands in the folder:
+ * regular files only, every name part letters, digits, - or _ with one final extension, so no hidden file, no second extension a server could hand to
+ * PHP (x.php.js), no traversal and no link.
+ */
 function untar($tgz, $to)
 {
 	remove_tree($to);
@@ -178,8 +183,8 @@ function untar($tgz, $to)
 		$long = null;
 		if ($type === 'x' && preg_match('/\d+ path=([^\n]+)\n/', $data, $m)) $long = $m[1];
 		$name = ltrim($name, '/');
-		if (($type !== '0' && $type !== "\0") || strpos($name, '..') !== false) continue;
-		if (!preg_match('#^package/dist/((cdn|schemas)/[A-Za-z0-9._/-]+\.(js|json))$#', $name, $m)) continue;
+		if ($type !== '0' && $type !== "\0") continue;
+		if (!preg_match('#^package/dist/((cdn|schemas)(/[A-Za-z0-9_-]+)*/[A-Za-z0-9_-]+\.(js|json))$#', $name, $m)) continue;
 		$file = "$to/$m[1]";
 		if (!is_dir(dirname($file)) && !mkdir(dirname($file), 0755, true)) return false;
 		if (file_put_contents($file, $data) !== strlen($data)) return false;
